@@ -18,6 +18,12 @@ namespace ModernMenuManager
         [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
         public static extern int SHLoadIndirectString(string pszSource, StringBuilder pszOutBuf, int cchOutBuf, IntPtr ppvReserved);
 
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        public static extern int SHCreateItemFromParsingName(string pszPath, IntPtr pbc, ref Guid riid, out IntPtr ppv);
+
+        [DllImport("shell32.dll")]
+        public static extern int SHCreateShellItemArrayFromShellItem(IntPtr psi, ref Guid riid, out IntPtr ppv);
+
         [DllImport("ole32.dll")]
         public static extern int CoInitializeEx(IntPtr pvReserved, uint dwCoInit);
 

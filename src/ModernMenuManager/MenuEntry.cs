@@ -21,6 +21,7 @@ namespace ModernMenuManager
         public string VerbId;
         public volatile string ProbedTitle;
         public string FixedTitle;
+        public string Suffix;
         public readonly SortedSet<string> ItemTypes = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
         public bool BlockedUser;
         public bool BlockedMachine;
@@ -33,7 +34,8 @@ namespace ModernMenuManager
             {
                 var t = FixedTitle ?? ProbedTitle ?? ComDisplayName ?? VerbId ?? BlockList.Format(Clsid);
                 // Drop menu accelerator markers ("&Open" -> "Open", "&&" -> "&").
-                return t.Replace("&&", "\0").Replace("&", "").Replace("\0", "&");
+                t = t.Replace("&&", "\0").Replace("&", "").Replace("\0", "&");
+                return Suffix == null ? t : t + "（" + Suffix + "）";
             }
         }
 

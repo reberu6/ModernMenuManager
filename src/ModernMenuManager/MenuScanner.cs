@@ -72,6 +72,11 @@ namespace ModernMenuManager
             var list = entries.Values.ToList();
             ProbeTitles(list.Where(e => e.Source == EntrySource.Package).ToList());
 
+            // Several commands of one app with the same name (e.g. OneDrive): tell them apart by verb id.
+            foreach (var dup in list.Where(e => e.Source == EntrySource.Package).GroupBy(e => e.AppName + "\n" + e.Title).Where(g => g.Count() > 1))
+                foreach (var e in dup)
+                    e.Suffix = string.IsNullOrEmpty(e.VerbId) ? BlockList.Format(e.Clsid).Substring(1, 8) : e.VerbId;
+
             foreach (var e in list)
                 Log.Write(string.Format("{0} [{1}] {2} | {3} | {4} | user={5} machine={6}",
                     BlockList.Format(e.Clsid), e.Source, e.Title, e.AppName, e.PackageFullName, e.BlockedUser, e.BlockedMachine));
@@ -293,7 +298,7 @@ namespace ModernMenuManager
             {
                 // Fall through to the generic label.
             }
-            return "（不明項目）";
+            return "不明項目 " + BlockList.Format(clsid);
         }
 
         /// <summary>
@@ -344,23 +349,88 @@ namespace ModernMenuManager
             {
                 if (!(obj is IExplorerCommand cmd))
                     return null;
-                hr = cmd.GetTitle(IntPtr.Zero, out var p);
-                if (hr < 0 || p == IntPtr.Zero)
-                    return null;
+                // Explorer always passes the selected items; some commands return junk without them,
+                // so ask the way Explorer does (with the user's profile folder), then without items.
+                var items = ProfileFolderItemArray();
                 try
                 {
-                    var title = System.Runtime.InteropServices.Marshal.PtrToStringUni(p);
-                    return string.IsNullOrWhiteSpace(title) ? null : title;
+                    var title = CallGetTitle(cmd, items);
+                    if (title == null && items != IntPtr.Zero)
+                        title = CallGetTitle(cmd, IntPtr.Zero);
+                    if (title != null && !LooksLikeText(title))
+                    {
+                        Log.Write("Ignored garbled title " + BlockList.Format(clsid) + ": " + title);
+                        title = null;
+                    }
+                    return title;
                 }
                 finally
                 {
-                    System.Runtime.InteropServices.Marshal.FreeCoTaskMem(p);
+                    if (items != IntPtr.Zero)
+                        System.Runtime.InteropServices.Marshal.Release(items);
                 }
             }
             finally
             {
                 System.Runtime.InteropServices.Marshal.ReleaseComObject(obj);
             }
+        }
+
+        static string CallGetTitle(IExplorerCommand cmd, IntPtr items)
+        {
+            int hr = cmd.GetTitle(items, out var p);
+            if (hr < 0 || p == IntPtr.Zero)
+                return null;
+            try
+            {
+                var title = System.Runtime.InteropServices.Marshal.PtrToStringUni(p);
+                return string.IsNullOrWhiteSpace(title) ? null : title;
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.FreeCoTaskMem(p);
+            }
+        }
+
+        static IntPtr ProfileFolderItemArray()
+        {
+            var iidShellItem = new Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe");
+            var iidShellItemArray = new Guid("b63ea76d-1f85-456f-a19c-48159efa858b");
+            var folder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (NativeMethods.SHCreateItemFromParsingName(folder, IntPtr.Zero, ref iidShellItem, out var item) < 0 || item == IntPtr.Zero)
+                return IntPtr.Zero;
+            try
+            {
+                return NativeMethods.SHCreateShellItemArrayFromShellItem(item, ref iidShellItemArray, out var array) < 0 ? IntPtr.Zero : array;
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.Release(item);
+            }
+        }
+
+        /// <summary>Rejects strings read from bad memory: control, private-use or unpaired surrogate chars, or odd script mixes.</summary>
+        static bool LooksLikeText(string s)
+        {
+            bool cjk = false, cyrillic = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                char c = s[i];
+                if (char.IsControl(c) || c == '\uFFFD' || (c >= '\uE000' && c <= '\uF8FF'))
+                    return false;
+                if (char.IsHighSurrogate(c))
+                {
+                    if (i + 1 >= s.Length || !char.IsLowSurrogate(s[i + 1]))
+                        return false;
+                    i++;
+                    continue;
+                }
+                if (char.IsLowSurrogate(c))
+                    return false;
+                if (c >= '\u0400' && c <= '\u052F') cyrillic = true;
+                if ((c >= '\u3000' && c <= '\u9FFF') || (c >= '\uAC00' && c <= '\uD7AF') || (c >= '\uF900' && c <= '\uFFEF')) cjk = true;
+            }
+            return !(cjk && cyrillic);
         }
     }
 }

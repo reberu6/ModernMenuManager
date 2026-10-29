@@ -37,8 +37,9 @@ namespace ModernMenuManager
             {
                 AutoSize = true,
                 Margin = new Padding(0, 0, 0, (int)(6 * scale)),
-                Text = "打勾 = 顯示在新式右鍵選單，取消打勾 = 隱藏。改完按「套用變更」，再按「重新啟動檔案總管」就會生效。\n" +
-                       "隱藏只是加進 Windows 的封鎖清單，隨時可以打勾恢復。「顯示其他選項」裡的舊式項目請用 ContextMenuManager 管理。",
+                Text = "打勾 = 允許顯示，取消打勾 = 隱藏。每個項目只在特定地方出現（看「出現在」欄，有些 App 也會自己決定何時出現）。\n" +
+                       "改完按「套用變更」，再按「重新啟動檔案總管」就會生效。" +
+                       "隱藏只是加進 Windows 的封鎖清單，隨時可以打勾恢復。\n「顯示其他選項」裡的舊式項目請用 ContextMenuManager 管理。",
             };
 
             list = new ListView
@@ -139,7 +140,7 @@ namespace ModernMenuManager
         static string StatusText(MenuEntry e, bool wantVisible)
         {
             if (wantVisible == !e.IsHidden)
-                return e.BlockedMachine ? "已隱藏（所有使用者）" : e.BlockedUser ? "已隱藏" : "顯示中";
+                return e.BlockedMachine ? "已隱藏（所有使用者）" : e.BlockedUser ? "已隱藏" : "允許顯示";
             return wantVisible ? "待套用：恢復顯示" : "待套用：隱藏";
         }
 
