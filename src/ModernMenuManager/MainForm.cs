@@ -242,7 +242,7 @@ namespace ModernMenuManager
                 // Windows usually restarts the shell on its own; start it ourselves if it did not.
                 System.Threading.Thread.Sleep(2000);
                 if (Process.GetProcessesByName("explorer").Length == 0)
-                    Process.Start("explorer.exe");
+                    Process.Start(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"));
                 statusLabel.Text = "檔案總管已重新啟動。";
             }
             catch (Exception ex)
@@ -254,7 +254,7 @@ namespace ModernMenuManager
         void OpenLog()
         {
             if (File.Exists(Log.FilePath))
-                Process.Start("notepad.exe", "\"" + Log.FilePath + "\"");
+                Process.Start(Path.Combine(Environment.SystemDirectory, "notepad.exe"), "\"" + Log.FilePath + "\"");
             else
                 statusLabel.Text = "還沒有記錄檔。";
         }

@@ -113,7 +113,7 @@ namespace ModernMenuManager
             // Also ask PowerShell; it covers sparse packages (e.g. VS Code, 7-Zip) and anything the registry missed.
             try
             {
-                var psi = new ProcessStartInfo("powershell.exe",
+                var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"),
                     "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[Text.Encoding]::UTF8; " +
                     "Get-AppxPackage | ForEach-Object { $_.PackageFullName + '|' + $_.InstallLocation }\"")
                 {
