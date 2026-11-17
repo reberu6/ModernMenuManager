@@ -181,7 +181,7 @@ namespace ModernMenuManager
             }
 
             var machine = toShow.Where(e => e.BlockedMachine).Select(e => e.Clsid).ToList();
-            if (machine.Count > 0 && !BlockList.RunMachineElevated("unblock", machine))
+            if (machine.Count > 0 && !await BlockList.RunMachineElevatedAsync("unblock", machine))
                 MessageBox.Show(this, "有項目是「所有使用者」層級的隱藏，需要管理員權限才能恢復，這次沒有完成。", Text,
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
@@ -199,10 +199,14 @@ namespace ModernMenuManager
                 Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
             if (r != DialogResult.OK)
                 return;
-            if (BlockList.RunMachineElevated("block", selected.Select(e => e.Clsid)))
+            if (await BlockList.RunMachineElevatedAsync("block", selected.Select(e => e.Clsid)))
             {
                 await RefreshListAsync();
                 await AskRestartExplorerAsync();
+            }
+            else
+            {
+                statusLabel.Text = "沒有完成（已取消或權限不足）";
             }
         }
 

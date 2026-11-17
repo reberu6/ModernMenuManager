@@ -26,6 +26,24 @@ namespace ModernMenuManager
                 Buffer.Clear();
         }
 
+        /// <summary>Write one line directly to disk for elevated helper errors, without replacing the main log.</summary>
+        public static void AppendFileLine(string message)
+        {
+            try
+            {
+                lock (Gate)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(FilePath));
+                    File.AppendAllText(FilePath, DateTime.Now.ToString("HH:mm:ss.fff") + "  " +
+                                       message + Environment.NewLine, Encoding.UTF8);
+                }
+            }
+            catch
+            {
+                // Logging must never break the app.
+            }
+        }
+
         public static void Save()
         {
             try

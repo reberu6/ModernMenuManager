@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -68,7 +69,7 @@ namespace ModernMenuManager
         }
 
         /// <summary>Relaunches this exe elevated to change the machine-wide list. Returns false if cancelled or failed.</summary>
-        public static bool RunMachineElevated(string op, IEnumerable<Guid> clsids)
+        public static async Task<bool> RunMachineElevatedAsync(string op, IEnumerable<Guid> clsids)
         {
             var psi = new ProcessStartInfo(Application.ExecutablePath,
                                            "--machine " + op + " " + string.Join(",", clsids.Select(Format)))
@@ -80,13 +81,21 @@ namespace ModernMenuManager
             {
                 using (var p = Process.Start(psi))
                 {
-                    p.WaitForExit();
+                    if (p == null)
+                        return false;
+                    await Task.Run(() => p.WaitForExit());
                     return p.ExitCode == 0;
                 }
             }
             catch (Win32Exception)
             {
                 // The user declined the UAC prompt.
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Elevated command could not start or finish: " + ex);
+                Log.Save();
                 return false;
             }
         }
@@ -112,8 +121,11 @@ namespace ModernMenuManager
                 }
                 return 0;
             }
-            catch
+            catch (Exception ex)
             {
+                // This is a separate elevated process. Never overwrite the parent process log.
+                Log.AppendFileLine("Machine command failed: " +
+                                   (ex.GetType().Name + ": " + ex.Message).Replace('\r', ' ').Replace('\n', ' '));
                 return 1;
             }
         }
