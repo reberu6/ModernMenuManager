@@ -125,24 +125,41 @@ namespace ModernMenuManager
                 int added = 0;
                 using (var p = Process.Start(psi))
                 {
-                    string line;
-                    while ((line = p.StandardOutput.ReadLine()) != null)
+                    // Drain stdout as the child runs; synchronous ReadLine() could block forever.
+                    var lines = new List<string>();
+                    p.OutputDataReceived += (sender, args) =>
                     {
-                        var parts = line.Split(new[] { '|' }, 2);
-                        if (parts[0].Length == 0)
-                            continue;
-                        var location = parts.Length > 1 && parts[1].Length > 0 ? parts[1] : null;
-                        if (!result.TryGetValue(parts[0], out var existing))
+                        if (args.Data != null)
+                            lines.Add(args.Data);
+                    };
+                    p.BeginOutputReadLine();
+                    if (!p.WaitForExit(30000))
+                    {
+                        try { p.Kill(); }
+                        catch (Exception ex) { Log.Write("PowerShell kill failed: " + ex.Message); }
+                        Log.Write("Get-AppxPackage timed out after 30 seconds; using registry packages only.");
+                    }
+                    else
+                    {
+                        // Complete asynchronous stdout callbacks before inspecting the lines.
+                        p.WaitForExit();
+                        foreach (var line in lines)
                         {
-                            result[parts[0]] = location;
-                            added++;
-                        }
-                        else if (existing == null)
-                        {
-                            result[parts[0]] = location;
+                            var parts = line.Split(new[] { '|' }, 2);
+                            if (parts[0].Length == 0)
+                                continue;
+                            var location = parts.Length > 1 && parts[1].Length > 0 ? parts[1] : null;
+                            if (!result.TryGetValue(parts[0], out var existing))
+                            {
+                                result[parts[0]] = location;
+                                added++;
+                            }
+                            else if (existing == null)
+                            {
+                                result[parts[0]] = location;
+                            }
                         }
                     }
-                    p.WaitForExit(30000);
                 }
                 Log.Write("Packages added by Get-AppxPackage: " + added);
             }
