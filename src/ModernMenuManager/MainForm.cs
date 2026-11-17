@@ -69,7 +69,7 @@ namespace ModernMenuManager
             var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Margin = new Padding(0, (int)(6 * scale), 0, 0) };
             refreshButton = MakeButton("重新整理", async (s, e) => await RefreshListAsync());
             applyButton = MakeButton("套用變更", async (s, e) => await ApplyAsync());
-            restartButton = MakeButton("重新啟動檔案總管", (s, e) => RestartExplorer());
+            restartButton = MakeButton("重新啟動檔案總管", async (s, e) => await RestartExplorerAsync());
             logButton = MakeButton("開啟記錄檔", (s, e) => OpenLog());
             statusLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding((int)(12 * scale), (int)(8 * scale), 0, 0) };
             buttons.Controls.AddRange(new Control[] { refreshButton, applyButton, restartButton, logButton, statusLabel });
@@ -186,7 +186,7 @@ namespace ModernMenuManager
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
             await RefreshListAsync();
-            AskRestartExplorer();
+            await AskRestartExplorerAsync();
         }
 
         async Task HideForAllUsersAsync()
@@ -202,7 +202,7 @@ namespace ModernMenuManager
             if (BlockList.RunMachineElevated("block", selected.Select(e => e.Clsid)))
             {
                 await RefreshListAsync();
-                AskRestartExplorer();
+                await AskRestartExplorerAsync();
             }
         }
 
@@ -223,32 +223,97 @@ namespace ModernMenuManager
             }
         }
 
-        void AskRestartExplorer()
+        async Task AskRestartExplorerAsync()
         {
             var r = MessageBox.Show(this, "已套用。要現在重新啟動檔案總管讓變更生效嗎？\n（桌面和工作列會閃一下，開著的資料夾視窗會關閉）",
                                     Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (r == DialogResult.Yes)
-                RestartExplorer();
+                await RestartExplorerAsync();
         }
 
-        void RestartExplorer()
+        async Task RestartExplorerAsync()
         {
+            SetBusy(true, "正在重新啟動檔案總管…");
             try
             {
-                foreach (var p in Process.GetProcessesByName("explorer"))
-                {
-                    try { p.Kill(); p.WaitForExit(5000); } catch { }
-                }
-                // Windows usually restarts the shell on its own; start it ourselves if it did not.
-                System.Threading.Thread.Sleep(2000);
-                if (Process.GetProcessesByName("explorer").Length == 0)
-                    Process.Start(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"));
-                statusLabel.Text = "檔案總管已重新啟動。";
+                string result = await Task.Run(() => RestartShell());
+                SetBusy(false, result);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "重新啟動檔案總管失敗：" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Log.Write("Restart Explorer failed: " + ex);
+                Log.Save();
+                SetBusy(false, "重新啟動檔案總管失敗。");
+                MessageBox.Show(this, "重新啟動檔案總管失敗：" + ex.Message, Text,
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        static string RestartShell()
+        {
+            int session;
+            using (var self = Process.GetCurrentProcess())
+                session = self.SessionId;
+
+            var shellWindow = NativeMethods.GetShellWindow();
+            uint shellPid = 0;
+            bool foundShell = false;
+            if (shellWindow != IntPtr.Zero &&
+                NativeMethods.GetWindowThreadProcessId(shellWindow, out shellPid) != 0 && shellPid != 0)
+            {
+                try
+                {
+                    using (var shell = Process.GetProcessById((int)shellPid))
+                    {
+                        if (shell.ProcessName.Equals("explorer", StringComparison.OrdinalIgnoreCase) &&
+                            shell.SessionId == session)
+                        {
+                            foundShell = true;
+                            shell.Kill();
+                            if (!shell.WaitForExit(5000))
+                                throw new TimeoutException("殼層行程未能在 5 秒內結束。");
+                        }
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    // The shell exited before we could open it; use the session-only fallback.
+                }
+            }
+
+            if (!foundShell)
+            {
+                // Only fall back to all Explorer processes in this session if the shell PID is unavailable.
+                foreach (var p in Process.GetProcessesByName("explorer"))
+                {
+                    using (p)
+                    {
+                        try
+                        {
+                            if (p.SessionId != session)
+                                continue;
+                            p.Kill();
+                            if (!p.WaitForExit(5000))
+                                Log.Write("Explorer process " + p.Id + " did not exit within 5 seconds.");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Write("Explorer fallback failed: " + ex.Message);
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < 20; i++)
+            {
+                System.Threading.Thread.Sleep(500);
+                if (NativeMethods.GetShellWindow() != IntPtr.Zero)
+                    return "檔案總管已重新啟動。";
+            }
+
+            // The shell did not come back automatically. Launch it only once, without opening a folder.
+            Process.Start(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"));
+            return "檔案總管未在 10 秒內自動恢復，已嘗試啟動。";
         }
 
         void OpenLog()

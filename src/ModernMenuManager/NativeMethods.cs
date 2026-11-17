@@ -6,6 +6,12 @@ namespace ModernMenuManager
 {
     static class NativeMethods
     {
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetShellWindow();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
         public const uint CLSCTX_LOCAL_SERVER = 0x4;
         public const uint COINIT_MULTITHREADED = 0x0;
 
