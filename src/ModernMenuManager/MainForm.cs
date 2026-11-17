@@ -181,25 +181,84 @@ namespace ModernMenuManager
                 return;
             }
 
-            try
+            var failedNames = new List<string>();
+            var failedLogs = new List<string>();
+            var machineToShow = new List<MenuEntry>();
+            int success = 0;
+
+            foreach (var e in toHide)
             {
-                foreach (var e in toHide)
+                try
+                {
                     BlockList.BlockUser(e.Clsid, e.Title);
-                foreach (var e in toShow)
-                    BlockList.UnblockUser(e.Clsid);
+                    success++;
+                }
+                catch (Exception ex)
+                {
+                    failedNames.Add(e.Title);
+                    failedLogs.Add("Hide failed " + BlockList.Format(e.Clsid) + " (" + e.Title + "): " + ex);
+                }
             }
-            catch (Exception ex)
+
+            foreach (var e in toShow)
             {
-                MessageBox.Show(this, "寫入登錄檔失敗：" + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                try
+                {
+                    BlockList.UnblockUser(e.Clsid);
+                    if (e.BlockedMachine)
+                        machineToShow.Add(e);
+                    else
+                        success++;
+                }
+                catch (Exception ex)
+                {
+                    failedNames.Add(e.Title);
+                    failedLogs.Add("Show failed " + BlockList.Format(e.Clsid) + " (" + e.Title + "): " + ex);
+                }
             }
 
-            var machine = toShow.Where(e => e.BlockedMachine).Select(e => e.Clsid).ToList();
-            if (machine.Count > 0 && !await BlockList.RunMachineElevatedAsync("unblock", machine))
-                MessageBox.Show(this, "有項目是「所有使用者」層級的隱藏，需要管理員權限才能恢復，這次沒有完成。", Text,
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (machineToShow.Count > 0)
+            {
+                bool elevatedSuccess = false;
+                try
+                {
+                    elevatedSuccess = await BlockList.RunMachineElevatedAsync(
+                        "unblock", machineToShow.Select(e => e.Clsid));
+                }
+                catch (Exception ex)
+                {
+                    failedLogs.Add("Machine unblock failed: " + ex);
+                }
+                foreach (var e in machineToShow)
+                {
+                    if (elevatedSuccess)
+                        success++;
+                    else
+                    {
+                        failedNames.Add(e.Title);
+                        failedLogs.Add("Machine unblock did not complete for " + BlockList.Format(e.Clsid) +
+                                       " (" + e.Title + "): cancelled or insufficient permissions.");
+                    }
+                }
+            }
 
+            // RefreshListAsync resets the scan log, so record apply failures after refreshing.
             await RefreshListAsync();
-            await AskRestartExplorerAsync();
+            foreach (var error in failedLogs)
+                Log.Write(error);
+            if (failedLogs.Count > 0)
+                Log.Save();
+
+            string summary = string.Format("成功 {0} 項，失敗 {1} 項", success, failedNames.Count);
+            if (failedNames.Count > 0)
+                summary += "：" + string.Join("、", failedNames);
+            statusLabel.Text = summary;
+            if (success > 0)
+            {
+                await AskRestartExplorerAsync();
+                if (statusLabel.Text != summary)
+                    statusLabel.Text = summary + "；" + statusLabel.Text;
+            }
         }
 
         async Task HideForAllUsersAsync()
