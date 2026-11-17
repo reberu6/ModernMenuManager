@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -23,14 +23,26 @@ jobs:
           name: ModernMenuManager
           path: src/ModernMenuManager/bin/Release/ModernMenuManager.exe
 
+  release:
+    if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download exe
+        uses: actions/download-artifact@v4
+        with:
+          name: ModernMenuManager
+          path: dist
+
       - name: Publish release
-        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           $tag = "v0.1.${{ github.run_number }}"
-          gh release create $tag src/ModernMenuManager/bin/Release/ModernMenuManager.exe `
+          gh release create $tag dist/ModernMenuManager.exe `
             --repo "${{ github.repository }}" --target "${{ github.sha }}" `
             --title "ModernMenuManager $tag" `
             --notes "下載 ModernMenuManager.exe 直接執行即可（不用安裝）。分支：${{ github.ref_name }}"
