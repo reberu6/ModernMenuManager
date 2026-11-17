@@ -16,6 +16,7 @@ namespace ModernMenuManager
         readonly Label statusLabel;
         readonly Button refreshButton, applyButton, restartButton, logButton;
         readonly ListViewGroup packageGroup, builtInGroup, otherGroup;
+        readonly Font regularFont, boldFont;
         bool populating;
 
         public MainForm()
@@ -79,7 +80,19 @@ namespace ModernMenuManager
             layout.Controls.Add(buttons, 0, 2);
             Controls.Add(layout);
 
+            regularFont = new Font(list.Font, FontStyle.Regular);
+            boldFont = new Font(list.Font, FontStyle.Bold);
             Shown += async (s, e) => await RefreshListAsync();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+            {
+                regularFont?.Dispose();
+                boldFont?.Dispose();
+            }
         }
 
         static Button MakeButton(string text, EventHandler onClick)
@@ -149,7 +162,7 @@ namespace ModernMenuManager
             if (populating || !(args.Item.Tag is MenuEntry e))
                 return;
             args.Item.SubItems[3].Text = StatusText(e, args.Item.Checked);
-            args.Item.Font = new Font(list.Font, args.Item.Checked == !e.IsHidden ? FontStyle.Regular : FontStyle.Bold);
+            args.Item.Font = args.Item.Checked == !e.IsHidden ? regularFont : boldFont;
         }
 
         async Task ApplyAsync()
