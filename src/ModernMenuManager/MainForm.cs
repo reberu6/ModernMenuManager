@@ -209,8 +209,18 @@ namespace ModernMenuManager
         void CopyClsid()
         {
             var selected = list.SelectedItems.Cast<ListViewItem>().Select(i => BlockList.Format(((MenuEntry)i.Tag).Clsid)).ToList();
-            if (selected.Count > 0)
+            if (selected.Count == 0)
+                return;
+            try
+            {
                 Clipboard.SetText(string.Join(Environment.NewLine, selected));
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Copy CLSID failed: " + ex);
+                Log.Save();
+                statusLabel.Text = "複製失敗，剪貼簿被其他程式占用";
+            }
         }
 
         void AskRestartExplorer()
